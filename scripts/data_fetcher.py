@@ -105,11 +105,12 @@ class DataFetcher:
     # @staticmethod
     def _click_button(self, driver, button_search_type, button_search_key):
         '''wrapped click function, click only when the element is clickable'''
-        click_element = driver.find_element(button_search_type, button_search_key)
-        # logging.info(f"click_element:{button_search_key}.is_displayed() = {click_element.is_displayed()}\r")
-        # logging.info(f"click_element:{button_search_key}.is_enabled() = {click_element.is_enabled()}\r")
-        WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.element_to_be_clickable(click_element))
+        locator = (button_search_type, button_search_key)
+        logging.debug(f"Waiting clickable: {button_search_key}")
+        WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.element_to_be_clickable(locator))
+        click_element = driver.find_element(*locator)
         driver.execute_script("arguments[0].click();", click_element)
+        logging.debug(f"Clicked: {button_search_key}")
 
     # @staticmethod
     def _is_captcha_legal(self, captcha):
@@ -194,6 +195,7 @@ class DataFetcher:
     def _get_webdriver(self):
         if platform.system() == 'Windows':
             driver = webdriver.Edge(service=EdgeService(EdgeChromiumDriverManager().install()))
+            driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
         else:
             firefox_options = webdriver.FirefoxOptions()
             firefox_options.add_argument('--incognito')
