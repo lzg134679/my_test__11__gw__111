@@ -2,7 +2,7 @@ services:
   sgcc_electricity_app:
     env_file:
       - .env
-    image: arcw/sgcc_electricity:latest # registry.cn-hangzhou.aliyuncs.com/arcw/sgcc_electricity:latest
+    image: registry.cn-hangzhou.aliyuncs.com/arcw/sgcc_electricity:latest # arcw/sgcc_electricity:latest
     container_name: sgcc_electricity
     network_mode: "host"
     environment:
