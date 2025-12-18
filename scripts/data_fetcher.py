@@ -4,6 +4,8 @@ import re
 import subprocess
 import time
 
+import shutil
+
 import random
 import base64
 import sqlite3
@@ -201,7 +203,10 @@ class DataFetcher:
             firefox_options.add_argument('--disable-gpu')
             firefox_options.add_argument('--disable-dev-shm-usage')
             logging.info(f"Open Firefox.\r")
-            driver = webdriver.Firefox(options=firefox_options, service=FirefoxService("/usr/bin/geckodriver"))
+            gecko_path = os.getenv("GECKODRIVER_PATH") or shutil.which("geckodriver") or "/usr/local/bin/geckodriver"
+            if not os.path.exists(gecko_path):
+                raise FileNotFoundError(f"Geckodriver not found at {gecko_path}; set GECKODRIVER_PATH or ensure it is on PATH.")
+            driver = webdriver.Firefox(options=firefox_options, service=FirefoxService(gecko_path))
             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
         return driver
 
