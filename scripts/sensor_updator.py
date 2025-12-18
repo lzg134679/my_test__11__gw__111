@@ -58,7 +58,7 @@ class SensorUpdator:
         if first_day_history:
             self.update_first_day_history(postfix, first_day_history)
 
-        logging.info(f"User {user_id} state-refresh task run successfully!")
+        logging.info(f"户号 {user_id} 状态刷新完成。")
 
     def update_yesterday_tou(self, postfix: str, tou: dict):
         mapping = [
@@ -84,7 +84,7 @@ class SensorUpdator:
                 },
             }
             self.send_url(sensorName, request_body)
-            logging.info(f"Homeassistant sensor {sensorName} state updated: {value} kWh")
+            logging.info(f"HA 传感器 {sensorName} 已更新: {value} kWh")
 
     def update_month_tou(self, postfix: str, tou: dict):
         mapping = [
@@ -117,7 +117,7 @@ class SensorUpdator:
                 },
             }
             self.send_url(sensorName, request_body)
-            logging.info(f"Homeassistant sensor {sensorName} state updated: {value} {unit}")
+            logging.info(f"HA 传感器 {sensorName} 已更新: {value} {unit}")
 
     def update_first_day_history(self, postfix: str, first_day: dict):
         sensorName = FIRST_DAY_HISTORY_SENSOR_NAME + postfix
@@ -133,7 +133,7 @@ class SensorUpdator:
             },
         }
         self.send_url(sensorName, request_body)
-        logging.info(f"Homeassistant sensor {sensorName} state updated: {state_text}")
+        logging.info(f"HA 传感器 {sensorName} 已更新: {state_text}")
 
     def update_last_daily_usage(self, postfix: str, last_daily_date: str, sensorState: float):
         sensorName = DAILY_USAGE_SENSOR_NAME + postfix
@@ -150,7 +150,7 @@ class SensorUpdator:
         }
 
         self.send_url(sensorName, request_body)
-        logging.info(f"Homeassistant sensor {sensorName} state updated: {sensorState} kWh")
+        logging.info(f"HA 传感器 {sensorName} 已更新: {sensorState} kWh")
 
     def update_balance(self, postfix: str, sensorState: float):
         sensorName = BALANCE_SENSOR_NAME + postfix
@@ -168,7 +168,7 @@ class SensorUpdator:
         }
 
         self.send_url(sensorName, request_body)
-        logging.info(f"Homeassistant sensor {sensorName} state updated: {sensorState} CNY")
+        logging.info(f"HA 传感器 {sensorName} 已更新: {sensorState} 元")
 
     def update_month_data(self, postfix: str, sensorState: float, usage=False):
         sensorName = (
@@ -193,7 +193,7 @@ class SensorUpdator:
         }
 
         self.send_url(sensorName, request_body)
-        logging.info(f"Homeassistant sensor {sensorName} state updated: {sensorState} {'kWh' if usage else 'CNY'}")
+        logging.info(f"HA 传感器 {sensorName} 已更新: {sensorState} {'kWh' if usage else '元'}")
 
     def update_yearly_data(self, postfix: str, sensorState: float, usage=False):
         sensorName = (
@@ -218,7 +218,7 @@ class SensorUpdator:
             },
         }
         self.send_url(sensorName, request_body)
-        logging.info(f"Homeassistant sensor {sensorName} state updated: {sensorState} {'kWh' if usage else 'CNY'}")
+        logging.info(f"HA 传感器 {sensorName} 已更新: {sensorState} {'kWh' if usage else '元'}")
 
     def send_url(self, sensorName, request_body):
         headers = {
@@ -229,17 +229,17 @@ class SensorUpdator:
         try:
             response = requests.post(url, json=request_body, headers=headers)
             logging.debug(
-                f"Homeassistant REST API invoke, POST on {url}. response[{response.status_code}]: {response.content}"
+                f"调用 HA REST API POST {url}，返回 {response.status_code}: {response.content}"
             )
         except Exception as e:
-            logging.error(f"Homeassistant REST API invoke failed, reason is {e}")
+            logging.error(f"调用 HA REST API 失败，原因: {e}")
 
     def balance_notify(self, user_id, balance):
 
         if self.RECHARGE_NOTIFY :
             BALANCE = float(os.getenv("BALANCE", 10.0))
             PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN").split(",")        
-            logging.info(f"Check the electricity bill balance. When the balance is less than {BALANCE} CNY, the notification will be sent = {self.RECHARGE_NOTIFY}")
+            logging.info(f"检查电费余额，低于 {BALANCE} 元将通知，通知开关={self.RECHARGE_NOTIFY}")
             if balance < BALANCE :
                 for token in PUSHPLUS_TOKEN:
                     title = "电费余额不足提醒"
@@ -247,10 +247,10 @@ class SensorUpdator:
                     url = ("http://www.pushplus.plus/send?token="+ token+ "&title="+ title+ "&content="+ content)
                     requests.get(url)
                     logging.info(
-                        f"The current balance of user id {user_id} is {balance} CNY less than {BALANCE} CNY, notice has been sent, please pay attention to check and recharge."
+                        f"户号 {user_id} 当前余额 {balance} 元，低于阈值 {BALANCE} 元，已发送提醒，请及时充值。"
                     )
         else :
             logging.info(
-            f"Check the electricity bill balance, the notification will be sent = {self.RECHARGE_NOTIFY}")
+            f"检查电费余额，通知开关={self.RECHARGE_NOTIFY}")
             return
 

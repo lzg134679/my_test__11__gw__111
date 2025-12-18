@@ -45,9 +45,9 @@ def main():
             os.environ["PUSHPLUS_TOKEN"] = options.get("PUSHPLUS_TOKEN", "")
             os.environ["RUN_AT_START"] = str(options.get("RUN_AT_START", "true")).lower()
             RUN_AT_START = str(options.get("RUN_AT_START", "true")).lower() == "true"
-            logging.info(f"当前以Homeassistant Add-on 形式运行.")
+            logging.info(f"当前以 Homeassistant 插件形式运行。")
         except Exception as e:
-            logging.error(f"Failing to read the options.json file, the program will exit with an error message: {e}.")
+            logging.error(f"读取 options.json 失败，程序将退出，原因: {e}。")
             sys.exit()
     else:
         try:
@@ -61,36 +61,36 @@ def main():
             RUN_AT_START = os.getenv("RUN_AT_START","true").lower() == "true"
             
             logger_init(LOG_LEVEL)
-            logging.info(f"The current run runs as a docker image.")
+            logging.info(f"当前以 Docker 镜像方式运行。")
         except Exception as e:
-            logging.error(f"Failing to read the .env file, the program will exit with an error message: {e}.")
+            logging.error(f"读取 .env 失败，程序将退出，原因: {e}。")
             sys.exit()
 
-    logging.info(f"The current repository version is {VERSION}, and the repository address is https://github.com/ARC-MX/sgcc_electricity_new.git")
+    logging.info(f"当前仓库版本: {VERSION}")
     current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    logging.info(f"The current date is {current_datetime}.")
+    logging.info(f"当前时间: {current_datetime}。")
 
-    logging.info(f"start init ErrorWatcher")
+    logging.info(f"开始初始化 ErrorWatcher。")
     ErrorWatcher.init(root_dir='/data/errors')
-    logging.info(f'ErrorWatcher init done!')
+    logging.info(f'ErrorWatcher 初始化完成。')
     fetcher = DataFetcher(PHONE_NUMBER, PASSWORD)
 
     # 生成随机延迟时间（-10分钟到+10分钟）
     random_delay_minutes = random.randint(-10, 10)
     parsed_time = datetime.strptime(JOB_START_TIME, "%H:%M") + timedelta(minutes=random_delay_minutes)
-    logging.info(f"The current logged-in user name is {PHONE_NUMBER}, the homeassistant address is {HASS_URL}, and the program will be executed every day at {parsed_time.strftime('%H:%M')}.")
+    logging.info(f"当前账号: {PHONE_NUMBER}，Home Assistant 地址: {HASS_URL}，每日执行时间: {parsed_time.strftime('%H:%M')}。")
 
     # 添加随机延迟
     next_run_time = parsed_time + timedelta(hours=12)
 
-    logging.info(f'The next run will be at {parsed_time.strftime("%H:%M")} and {next_run_time.strftime("%H:%M")} every day')
+    logging.info(f'每日计划两次执行，时间 {parsed_time.strftime("%H:%M")} 和 {next_run_time.strftime("%H:%M")}')
     schedule.every().day.at(parsed_time.strftime("%H:%M")).do(run_task, fetcher)
     schedule.every().day.at(next_run_time.strftime("%H:%M")).do(run_task, fetcher)
     if RUN_AT_START:
-        logging.info('RUN_AT_START=true, run job now once at startup')
+        logging.info('RUN_AT_START=true，启动即执行一次任务。')
         run_task(fetcher)
     else:
-        logging.info('RUN_AT_START=false, skip immediate run at startup')
+        logging.info('RUN_AT_START=false，启动时不立即执行任务。')
 
     while True:
         schedule.run_pending()
@@ -103,7 +103,7 @@ def run_task(data_fetcher: DataFetcher):
             data_fetcher.fetch()
             return
         except Exception as e:
-            logging.error(f"state-refresh task failed, reason is [{e}], {RETRY_TIMES_LIMIT - retry_times} retry times left.")
+            logging.error(f"任务失败: {e}，剩余重试 {RETRY_TIMES_LIMIT - retry_times} 次。")
             continue
 
 def logger_init(level: str):

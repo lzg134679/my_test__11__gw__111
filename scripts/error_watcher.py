@@ -27,7 +27,7 @@ class ErrorWatcher:
     @classmethod
     def instance(cls):
         if cls._instance is None:
-            raise ValueError("ErrorWatcher has not been initialized. Call init() first.")
+            raise ValueError("ErrorWatcher 尚未初始化，请先调用 init()。")
         return cls._instance
     
     @classmethod
@@ -101,7 +101,7 @@ class ErrorWatcher:
         """
         driver = options.get('driver', self.driver)
         if not driver:
-            logging.error("No driver set for taking screenshots.")
+            logging.error("未设置浏览器驱动，无法截图。")
             return
 
         error_message = str(error)
@@ -110,9 +110,9 @@ class ErrorWatcher:
         
         try:
             self.driver.save_screenshot(screenshot_path)
-            logging.error(f"Error occurred: {error_message}. Screenshot saved to {screenshot_path}")
+            logging.error(f"捕获异常: {error_message}，截图已保存到 {screenshot_path}")
         except Exception as e:
-            logging.error(f"Failed to save screenshot: {e}")
+            logging.error(f"保存截图失败: {e}")
             # do not raise the exception here to avoid masking the original error
         finally:
             pass

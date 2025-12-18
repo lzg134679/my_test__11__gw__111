@@ -100,17 +100,18 @@ class DataFetcher:
         self.RETRY_TIMES_LIMIT = int(os.getenv("RETRY_TIMES_LIMIT", 5))
         self.LOGIN_EXPECTED_TIME = int(os.getenv("LOGIN_EXPECTED_TIME", 10))
         self.RETRY_WAIT_TIME_OFFSET_UNIT = int(os.getenv("RETRY_WAIT_TIME_OFFSET_UNIT", 10))
+        # Faster waits for inner table expansion to avoid long per-row delays
+        self.DETAIL_WAIT_TIME = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 3))
         self.IGNORE_USER_ID = os.getenv("IGNORE_USER_ID", "xxxxx,xxxxx").split(",")
 
     # @staticmethod
     def _click_button(self, driver, button_search_type, button_search_key):
         '''wrapped click function, click only when the element is clickable'''
-        locator = (button_search_type, button_search_key)
-        logging.debug(f"Waiting clickable: {button_search_key}")
-        WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.element_to_be_clickable(locator))
-        click_element = driver.find_element(*locator)
+        click_element = driver.find_element(button_search_type, button_search_key)
+        # logging.info(f"click_element:{button_search_key}.is_displayed() = {click_element.is_displayed()}\r")
+        # logging.info(f"click_element:{button_search_key}.is_enabled() = {click_element.is_enabled()}\r")
+        WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.element_to_be_clickable(click_element))
         driver.execute_script("arguments[0].click();", click_element)
-        logging.debug(f"Clicked: {button_search_key}")
 
     # @staticmethod
     def _is_captcha_legal(self, captcha):
@@ -145,14 +146,14 @@ class DataFetcher:
                 DB_NAME = "/data/" + DB_NAME
             self.connect = sqlite3.connect(DB_NAME)
             self.connect.cursor()
-            logging.info(f"Database of {DB_NAME} created successfully.")
+            logging.info(f"数据库 {DB_NAME} 创建成功。")
             # 创建表名
             self.table_name = f"daily{user_id}"
             sql = f'''CREATE TABLE IF NOT EXISTS {self.table_name} (
                     date DATE PRIMARY KEY NOT NULL, 
                     usage REAL NOT NULL)'''
             self.connect.execute(sql)
-            logging.info(f"Table {self.table_name} created successfully")
+            logging.info(f"数据表 {self.table_name} 创建成功。")
 			
 			# 创建data表名
             self.table_expand_name = f"data{user_id}"
@@ -160,17 +161,17 @@ class DataFetcher:
                     name TEXT PRIMARY KEY NOT NULL,
                     value TEXT NOT NULL)'''
             self.connect.execute(sql)
-            logging.info(f"Table {self.table_expand_name} created successfully")
+            logging.info(f"扩展表 {self.table_expand_name} 创建成功。")
 			
         # 如果表已存在，则不会创建
         except sqlite3.Error as e:
-            logging.debug(f"Create db or Table error:{e}")
+            logging.debug(f"创建数据库/表出错: {e}")
             return False
         return True
 
     def insert_data(self, data:dict):
         if self.connect is None:
-            logging.error("Database connection is not established.")
+            logging.error("数据库连接未建立。")
             return
         # 创建索引
         try:
@@ -178,11 +179,11 @@ class DataFetcher:
             self.connect.execute(sql)
             self.connect.commit()
         except BaseException as e:
-            logging.debug(f"Data update failed: {e}")
+            logging.debug(f"数据写入失败: {e}")
 
     def insert_expand_data(self, data:dict):
         if self.connect is None:
-            logging.error("Database connection is not established.")
+            logging.error("数据库连接未建立。")
             return
         # 创建索引
         try:
@@ -190,12 +191,11 @@ class DataFetcher:
             self.connect.execute(sql)
             self.connect.commit()
         except BaseException as e:
-            logging.debug(f"Data update failed: {e}")
+            logging.debug(f"数据写入失败: {e}")
                 
     def _get_webdriver(self):
         if platform.system() == 'Windows':
             driver = webdriver.Edge(service=EdgeService(EdgeChromiumDriverManager().install()))
-            driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
         else:
             firefox_options = webdriver.FirefoxOptions()
             firefox_options.add_argument('--incognito')
@@ -204,7 +204,7 @@ class DataFetcher:
             firefox_options.add_argument('--no-sandbox')
             firefox_options.add_argument('--disable-gpu')
             firefox_options.add_argument('--disable-dev-shm-usage')
-            logging.info(f"Open Firefox.\r")
+            logging.info(f"启动 Firefox 浏览器。\r")
             gecko_path = os.getenv("GECKODRIVER_PATH") or shutil.which("geckodriver") or "/usr/local/bin/geckodriver"
             if not os.path.exists(gecko_path):
                 raise FileNotFoundError(f"Geckodriver not found at {gecko_path}; set GECKODRIVER_PATH or ensure it is on PATH.")
@@ -218,47 +218,49 @@ class DataFetcher:
             driver.get(LOGIN_URL)
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of_element_located((By.CLASS_NAME, "user")))
         except:
-            logging.debug(f"Login failed, open URL: {LOGIN_URL} failed.")
-        logging.info(f"Open LOGIN_URL:{LOGIN_URL}.\r")
+            logging.debug(f"登录页打开失败，无法访问 {LOGIN_URL}。")
+        logging.info(f"打开登录页 {LOGIN_URL}。\r")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
         # swtich to username-password login page
         driver.find_element(By.CLASS_NAME, "user").click()
-        logging.info("find_element 'user'.\r")
+        logging.info("切换到账号密码登录页。\r")
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         # click agree button
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[1]/form/div[1]/div[3]/div/span[2]')
-        logging.info("Click the Agree option.\r")
+        logging.info("点击同意协议。\r")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         if phone_code:
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[3]/span')
             input_elements = driver.find_elements(By.CLASS_NAME, "el-input__inner")
             input_elements[2].send_keys(self._username)
-            logging.info(f"input_elements username : {self._username}\r")
+            logging.info(f"输入手机号: {self._username}\r")
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[2]/form/div[1]/div[2]/div[2]/div/a')
             code = input("Input your phone verification code: ")
             input_elements[3].send_keys(code)
-            logging.info(f"input_elements verification code: {code}.\r")
+            logging.info(f"输入短信验证码: {code}.\r")
             # click login button
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[2]/form/div[2]/div/button/span')
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
-            logging.info("Click login button.\r")
+            logging.info("点击登录按钮。\r")
 
             return True
         else :
             # input username and password
             input_elements = driver.find_elements(By.CLASS_NAME, "el-input__inner")
             input_elements[0].send_keys(self._username)
-            logging.info(f"input_elements username : {self._username}\r")
+            logging.info(f"输入手机号: {self._username}\r")
             input_elements[1].send_keys(self._password)
-            logging.info(f"input_elements password : {self._password}\r")
+            logging.info(f"输入密码: {self._password}\r")
+            logging.info("账号密码已填，准备点击登录并处理滑块。")
 
             # click login button
             self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
-            logging.info("Click login button.\r")
+            logging.info("点击登录按钮。\r")
             # sometimes ddddOCR may fail, so add retry logic)
             for retry_times in range(1, self.RETRY_TIMES_LIMIT + 1):
+                logging.info(f"开始滑块尝试 {retry_times}/{self.RETRY_TIMES_LIMIT}。")
                 
                 self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
                 #get canvas image
@@ -268,24 +270,26 @@ class DataFetcher:
                 im_info = driver.execute_script(background_JS) 
                 background = im_info.split(',')[1]  
                 background_image = base64_to_PLI(background)
-                logging.info(f"Get electricity canvas image successfully.\r")
+                logging.info(f"获取滑块背景图成功。\r")
                 distance = self.onnx.get_distance(background_image)
-                logging.info(f"Image CaptCHA distance is {distance}.\r")
+                logging.info(f"识别滑块缺口距离: {distance}。\r")
 
                 self._sliding_track(driver, round(distance*1.06)) #1.06是补偿
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                time.sleep(self.DETAIL_WAIT_TIME)
+                logging.info("已拖动滑块，检查登录结果。")
                 if (driver.current_url == LOGIN_URL): # if login not success
                     try:
-                        logging.info(f"Sliding CAPTCHA recognition failed and reloaded.\r")
+                        logging.info(f"滑块校验失败，刷新重试。\r")
                         self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
-                        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
+                        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
                         continue
                     except:
                         logging.debug(
-                            f"Login failed, maybe caused by invalid captcha, {self.RETRY_TIMES_LIMIT - retry_times} retry times left.")
+                            f"登录失败，剩余 {self.RETRY_TIMES_LIMIT - retry_times} 次重试。")
                 else:
+                    logging.info("滑块验证通过，检测到登录成功。")
                     return True
-            logging.error(f"Login failed, maybe caused by Sliding CAPTCHA recognition failed")
+            logging.error(f"登录失败，可能因滑块校验未通过。")
         return False
 
         raise Exception(
@@ -300,33 +304,33 @@ class DataFetcher:
         
         driver.maximize_window() 
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-        logging.info("Webdriver initialized.")
+        logging.info("浏览器驱动初始化完成。")
         updator = SensorUpdator()
         
         try:
             if os.getenv("DEBUG_MODE", "false").lower() == "true":
                 if self._login(driver,phone_code=True):
-                    logging.info("login successed !")
+                    logging.info("登录成功！")
                 else:
-                    logging.info("login unsuccessed !")
+                    logging.info("登录失败！")
                     raise Exception("login unsuccessed")
             else:
                 if self._login(driver):
-                    logging.info("login successed !")
+                    logging.info("登录成功！")
                 else:
-                    logging.info("login unsuccessed !")
+                    logging.info("登录失败！")
                     raise Exception("login unsuccessed")
         except Exception as e:
             logging.error(
-                f"Webdriver quit abnormly, reason: {e}. {self.RETRY_TIMES_LIMIT} retry times left.")
+                f"浏览器异常退出，原因: {e}，剩余 {self.RETRY_TIMES_LIMIT} 次重试。")
             driver.quit()
             return
 
-        logging.info(f"Login successfully on {LOGIN_URL}")
+        logging.info(f"已登录: {LOGIN_URL}")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-        logging.info(f"Try to get the userid list")
+        logging.info(f"开始获取户号列表。")
         user_id_list = self._get_user_ids(driver)
-        logging.info(f"Here are a total of {len(user_id_list)} userids, which are {user_id_list} among which {self.IGNORE_USER_ID} will be ignored.")
+        logging.info(f"共 {len(user_id_list)} 个户号: {user_id_list}，其中 {self.IGNORE_USER_ID} 将被忽略。")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
 
 
@@ -339,7 +343,7 @@ class DataFetcher:
                 time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
                 current_userid = self._get_current_userid(driver)
                 if current_userid in self.IGNORE_USER_ID:
-                    logging.info(f"The user ID {current_userid} will be ignored in user_id_list")
+                    logging.info(f"户号 {current_userid} 在忽略列表中，跳过。")
                     continue
                 else:
                     ### get data 
@@ -361,10 +365,10 @@ class DataFetcher:
                     time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
             except Exception as e:
                 if (userid_index != len(user_id_list)):
-                    logging.info(f"The current user {user_id} data fetching failed {e}, the next user data will be fetched.")
+                    logging.info(f"户号 {user_id} 拉取失败 {e}，继续下一个。")
                 else:
-                    logging.info(f"The user {user_id} data fetching failed, {e}")
-                    logging.info("Webdriver quit after fetching data successfully.")
+                    logging.info(f"户号 {user_id} 拉取失败，错误: {e}")
+                    logging.info("数据拉取结束，关闭浏览器。")
                 continue    
 
         driver.quit()
@@ -387,10 +391,10 @@ class DataFetcher:
     def _get_all_data(self, driver, user_id, userid_index):
         balance = self._get_electric_balance(driver)
         if (balance is None):
-            logging.info(f"Get electricity charge balance for {user_id} failed, Pass.")
+            logging.info(f"获取户号 {user_id} 余额失败，跳过。")
         else:
             logging.info(
-                f"Get electricity charge balance for {user_id} successfully, balance is {balance} CNY.")
+                f"获取户号 {user_id} 余额成功，余额 {balance} 元。")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         # swithc to electricity usage page
         driver.get(ELECTRIC_USAGE_URL)
@@ -401,23 +405,23 @@ class DataFetcher:
         yearly_usage, yearly_charge = self._get_yearly_data(driver)
 
         if yearly_usage is None:
-            logging.error(f"Get year power usage for {user_id} failed, pass")
+            logging.error(f"获取户号 {user_id} 年用电量失败，跳过。")
         else:
             logging.info(
-                f"Get year power usage for {user_id} successfully, usage is {yearly_usage} kwh")
+                f"获取户号 {user_id} 年用电量成功，用电 {yearly_usage} kWh。")
         if yearly_charge is None:
-            logging.error(f"Get year power charge for {user_id} failed, pass")
+            logging.error(f"获取户号 {user_id} 年电费失败，跳过。")
         else:
             logging.info(
-                f"Get year power charge for {user_id} successfully, yealrly charge is {yearly_charge} CNY")
+                f"获取户号 {user_id} 年电费成功，费用 {yearly_charge} 元。")
 
         # 按月获取数据
         month, month_usage, month_charge = self._get_month_usage(driver)
         if month is None:
-            logging.error(f"Get month power usage for {user_id} failed, pass")
+            logging.error(f"获取户号 {user_id} 月用电失败，跳过。")
         else:
             for m in range(len(month)):
-                logging.info(f"Get month power charge for {user_id} successfully, {month[m]} usage is {month_usage[m]} KWh, charge is {month_charge[m]} CNY.")
+                logging.info(f"获取户号 {user_id} {month[m]} 数据成功，用电 {month_usage[m]} kWh，电费 {month_charge[m]} 元。")
         # 近30天日用电（含谷/平/峰/尖）
         daily_records = self._get_daily_usage_data(driver)
         last_daily_date = None
@@ -435,16 +439,16 @@ class DataFetcher:
             }
 
         if last_daily_usage is None:
-            logging.error(f"Get daily power consumption for {user_id} failed, pass")
+            logging.error(f"获取户号 {user_id} 日用电失败，跳过。")
         else:
             logging.info(
-                f"Get daily power consumption for {user_id} successfully, {last_daily_date} usage is {last_daily_usage} kwh.")
+                f"获取户号 {user_id} 日用电成功，{last_daily_date} 用电 {last_daily_usage} kWh。")
         if yesterday_tou:
             logging.info(
-                f"Yesterday TOU parsed: date={yesterday_tou.get('date')}, valley={yesterday_tou.get('valley')}, flat={yesterday_tou.get('flat')}, peak={yesterday_tou.get('peak')}, sharp={yesterday_tou.get('sharp')}"
+                f"昨日分时: 日期={yesterday_tou.get('date')}, 谷={yesterday_tou.get('valley')}, 平={yesterday_tou.get('flat')}, 峰={yesterday_tou.get('peak')}, 尖={yesterday_tou.get('sharp')}"
             )
         if month is None:
-            logging.error(f"Get month power usage for {user_id} failed, pass")
+            logging.error(f"获取户号 {user_id} 月用电失败，跳过。")
 
         # 当月分时段汇总（仅当前月）
         month_tou = None
@@ -463,7 +467,7 @@ class DataFetcher:
                         if record.get(key) is not None:
                             month_tou[key] += record.get(key)
             logging.info(
-                f"Current month TOU summary: total={month_tou.get('total')}, valley={month_tou.get('valley')}, flat={month_tou.get('flat')}, peak={month_tou.get('peak')}, sharp={month_tou.get('sharp')}"
+                f"本月分时汇总: 总={month_tou.get('total')}, 谷={month_tou.get('valley')}, 平={month_tou.get('flat')}, 峰={month_tou.get('peak')}, 尖={month_tou.get('sharp')}"
             )
 
         # 找到当月1号的记录，存在则上报历史
@@ -486,12 +490,12 @@ class DataFetcher:
 
         # 新增储存用电量
         if self.enable_database_storage:
-            logging.info("enable_database_storage is true, we will store the data to the database.")
+            logging.info("已启用数据库持久化，开始写入数据。")
             date = [r.get("date") for r in daily_records if r.get("date")]
             usages = [r.get("total") for r in daily_records if r.get("total") is not None]
             self._save_user_data(user_id, balance, last_daily_date, last_daily_usage, date, usages, month, month_usage, month_charge, yearly_charge, yearly_usage)
         else:
-            logging.info("enable_database_storage is false, we will not store the data to the database.")
+            logging.info("未启用数据库持久化，跳过数据写入。")
 
         if month_charge:
             month_charge = month_charge[-1]
@@ -512,15 +516,15 @@ class DataFetcher:
             element = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.presence_of_element_located((By.CLASS_NAME, 'el-dropdown')))
             # click roll down button for user id
             self._click_button(driver, By.XPATH, "//div[@class='el-dropdown']/span")
-            logging.debug(f'''self._click_button(driver, By.XPATH, "//div[@class='el-dropdown']/span")''')
+            logging.debug(f"点击户号下拉按钮。")
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
             # wait for roll down menu displayed
             target = driver.find_element(By.CLASS_NAME, "el-dropdown-menu.el-popper").find_element(By.TAG_NAME, "li")
-            logging.debug(f'''target = driver.find_element(By.CLASS_NAME, "el-dropdown-menu.el-popper").find_element(By.TAG_NAME, "li")''')
+            logging.debug(f"获取下拉菜单首个选项。")
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-            logging.debug(f'''WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))''')
+            logging.debug(f"等待下拉菜单可见。")
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
                 EC.text_to_be_present_in_element((By.XPATH, "//ul[@class='el-dropdown-menu el-popper']/li"), ":"))
             time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
@@ -533,7 +537,7 @@ class DataFetcher:
             return userid_list
         except Exception as e:
             logging.error(
-                f"Webdriver quit abnormly, reason: {e}. get user_id list failed.")
+                f"浏览器异常退出，获取户号列表失败，原因: {e}。")
             driver.quit()
 
     def _get_electric_balance(self, driver):
@@ -562,20 +566,20 @@ class DataFetcher:
             target = driver.find_element(By.CLASS_NAME, "total")
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
         except Exception as e:
-            logging.error(f"The yearly data get failed : {e}")
+            logging.error(f"年数据获取失败: {e}")
             return None, None
 
         # get data
         try:
             yearly_usage = driver.find_element(By.XPATH, "//ul[@class='total']/li[1]/span").text
         except Exception as e:
-            logging.error(f"The yearly_usage data get failed : {e}")
+            logging.error(f"年用电量获取失败: {e}")
             yearly_usage = None
 
         try:
             yearly_charge = driver.find_element(By.XPATH, "//ul[@class='total']/li[2]/span").text
         except Exception as e:
-            logging.error(f"The yearly_charge data get failed : {e}")
+            logging.error(f"年电费获取失败: {e}")
             yearly_charge = None
 
         return yearly_usage, yearly_charge
@@ -597,7 +601,7 @@ class DataFetcher:
             last_daily_date = date_element.text # 获取最近一次用电量的日期
             return last_daily_date, float(usage_element.text)
         except Exception as e:
-            logging.error(f"The yesterday data get failed : {e}")
+            logging.error(f"昨日数据获取失败: {e}")
             return None
 
     def _get_month_usage(self, driver):
@@ -629,14 +633,15 @@ class DataFetcher:
                 charge.append(month_element[i][2])
             return month, usage, charge
         except Exception as e:
-            logging.error(f"The month data get failed : {e}")
+            logging.error(f"月数据获取失败: {e}")
             return None,None,None
 
     # 获取近30天每日用电量及分时段（谷/平/峰/尖）
     def _get_daily_usage_data(self, driver):
         records = []
+        logging.info("切换到日用电(近30天)标签。")
         self._click_button(driver, By.XPATH, "//div[@class='el-tabs__nav is-top']/div[@id='tab-second']")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(self.DETAIL_WAIT_TIME)
 
         # 强制切到近30天
         try:
@@ -644,7 +649,8 @@ class DataFetcher:
         except Exception:
             # 兼容只有一个选项的情况
             self._click_button(driver, By.XPATH, "//*[@id='pane-second']/div[1]/div/label[1]/span[1]")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(self.DETAIL_WAIT_TIME)
+        logging.info("日用电标签就绪，等待数据行出现。")
 
         # 等待第一行出现
         first_row = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
@@ -656,27 +662,35 @@ class DataFetcher:
             By.XPATH,
             "//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and not(contains(@class,'el-table__expanded-row'))]",
         )
+        logging.info(f"检测到 {len(rows)} 条日数据，开始解析。")
 
         for row in rows:
+            row_start = time.perf_counter()
             try:
                 day_text = row.find_element(By.XPATH, "td[1]/div").text
                 total_text = row.find_element(By.XPATH, "td[2]/div").text
                 total = float(total_text) if total_text else None
             except Exception as e:
-                logging.debug(f"Skip a day row because of parse error: {e}")
+                logging.debug(f"因解析错误跳过一行日数据: {e}")
                 continue
 
             valley = flat = peak = sharp = None
-            # 展开当日详情获取谷/平/峰/尖
+            # 展开当日详情获取谷/平/峰/尖（需点击行最右侧的箭头按钮）
             try:
-                expand_btn = row.find_element(By.XPATH, ".//span[contains(@class,'el-table__expand-icon')]")
+                # ElementUI 展开箭头通常是 button.el-table__expand-icon，span 不一定可点击
+                expand_btn = row.find_element(By.XPATH, ".//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')]")
                 # 先滚动到视区，再点击，失败重试一次
                 for attempt in range(2):
                     try:
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_btn)
                         time.sleep(0.5)
-                        driver.execute_script("arguments[0].click();", expand_btn)
-                        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                        # 优先用可点击等待再点击，失败再用 JS click
+                        try:
+                            WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(EC.element_to_be_clickable(expand_btn))
+                            expand_btn.click()
+                        except Exception:
+                            driver.execute_script("arguments[0].click();", expand_btn)
+                        time.sleep(self.DETAIL_WAIT_TIME)
                         detail_row = row.find_element(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
                         detail_items = detail_row.find_elements(By.TAG_NAME, "li")
                         for item in detail_items:
@@ -695,12 +709,12 @@ class DataFetcher:
                                 sharp = value
                         break
                     except Exception as inner_e:
-                        logging.debug(f"Expand attempt {attempt+1} failed for {day_text}: {inner_e}")
+                        logging.debug(f"展开 {day_text} 尝试 {attempt+1} 失败: {inner_e}")
                         if attempt == 1:
                             raise
                         time.sleep(1)
             except Exception as e:
-                logging.debug(f"Expand day detail failed, only total is available: {e}")
+                logging.debug(f"展开日详情失败，仅总用电可用: {e}")
 
             record = {
                 "date": day_text,
@@ -710,8 +724,9 @@ class DataFetcher:
                 "peak": peak,
                 "sharp": sharp,
             }
+            duration = time.perf_counter() - row_start
             logging.info(
-                f"Daily record parsed: date={day_text}, total={total}, valley={valley}, flat={flat}, peak={peak}, sharp={sharp}"
+                f"日记录: 日期={day_text}, 总={total}, 谷={valley}, 平={flat}, 峰={peak}, 尖={sharp}, 耗时={duration:.2f}s"
             )
             records.append(record)
         return records
@@ -744,9 +759,9 @@ class DataFetcher:
                 # 插入到数据库
                 try:
                     self.insert_data(dic)
-                    logging.info(f"The electricity consumption of {usages[index]}KWh on {date[index]} has been successfully deposited into the database")
+                    logging.info(f"已写入 {date[index]} 用电 {usages[index]}KWh 到数据库。")
                 except Exception as e:
-                    logging.debug(f"The electricity consumption of {date[index]} failed to save to the database, which may already exist: {str(e)}")
+                    logging.debug(f"写入 {date[index]} 用电失败，可能已存在: {str(e)}")
 
             for index in range(len(month)):
                 try:
@@ -755,7 +770,7 @@ class DataFetcher:
                     dic = {'name': f"{month[index]}charge", 'value': f"{month_charge[index]}"}
                     self.insert_expand_data(dic)
                 except Exception as e:
-                    logging.debug(f"The electricity consumption of {month[index]} failed to save to the database, which may already exist: {str(e)}")
+                    logging.debug(f"写入 {month[index]} 月度数据失败，可能已存在: {str(e)}")
             if month_charge:
                 month_charge = month_charge[-1]
             else:
@@ -774,7 +789,7 @@ class DataFetcher:
             # dic = {'date': month[index], 'usage': float(month_usage[index]), 'charge': float(month_charge[index])}
             self.connect.close()
         else:
-            logging.info("The database creation failed and the data was not written correctly.")
+            logging.info("数据库创建失败，数据未写入。")
             return
 
 if __name__ == "__main__":
