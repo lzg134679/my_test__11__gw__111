@@ -168,3 +168,5 @@ cython_debug/
 .github/
 .vscode/
 .git/
+
+examplehtml.txt

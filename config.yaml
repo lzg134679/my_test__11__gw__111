@@ -30,6 +30,7 @@ options:
   RECHARGE_NOTIFY: false
   BALANCE: 5.0
   PUSHPLUS_TOKEN: "xxxx,xxxx"
+  RUN_AT_START: true
 schema:
   PHONE_NUMBER: str
   PASSWORD: password
@@ -44,3 +45,4 @@ schema:
   RECHARGE_NOTIFY: bool 
   BALANCE: float 
   PUSHPLUS_TOKEN: str
+  RUN_AT_START: bool

@@ -43,6 +43,8 @@ def main():
             os.environ["RECHARGE_NOTIFY"] = str(options.get("RECHARGE_NOTIFY", "false")).lower()
             os.environ["BALANCE"] = str(options.get("BALANCE", 5.0))
             os.environ["PUSHPLUS_TOKEN"] = options.get("PUSHPLUS_TOKEN", "")
+            os.environ["RUN_AT_START"] = str(options.get("RUN_AT_START", "true")).lower()
+            RUN_AT_START = str(options.get("RUN_AT_START", "true")).lower() == "true"
             logging.info(f"当前以Homeassistant Add-on 形式运行.")
         except Exception as e:
             logging.error(f"Failing to read the options.json file, the program will exit with an error message: {e}.")
@@ -56,6 +58,7 @@ def main():
             LOG_LEVEL = os.getenv("LOG_LEVEL","INFO")
             VERSION = os.getenv("VERSION")
             RETRY_TIMES_LIMIT = int(os.getenv("RETRY_TIMES_LIMIT", 5))
+            RUN_AT_START = os.getenv("RUN_AT_START","true").lower() == "true"
             
             logger_init(LOG_LEVEL)
             logging.info(f"The current run runs as a docker image.")
@@ -80,10 +83,14 @@ def main():
     # 添加随机延迟
     next_run_time = parsed_time + timedelta(hours=12)
 
-    logging.info(f'Run job now! The next run will be at {parsed_time.strftime("%H:%M")} and {next_run_time.strftime("%H:%M")} every day')
+    logging.info(f'The next run will be at {parsed_time.strftime("%H:%M")} and {next_run_time.strftime("%H:%M")} every day')
     schedule.every().day.at(parsed_time.strftime("%H:%M")).do(run_task, fetcher)
     schedule.every().day.at(next_run_time.strftime("%H:%M")).do(run_task, fetcher)
-    run_task(fetcher)
+    if RUN_AT_START:
+        logging.info('RUN_AT_START=true, run job now once at startup')
+        run_task(fetcher)
+    else:
+        logging.info('RUN_AT_START=false, skip immediate run at startup')
 
     while True:
         schedule.run_pending()

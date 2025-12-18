@@ -432,6 +432,10 @@ class DataFetcher:
         else:
             logging.info(
                 f"Get daily power consumption for {user_id} successfully, {last_daily_date} usage is {last_daily_usage} kwh.")
+        if yesterday_tou:
+            logging.info(
+                f"Yesterday TOU parsed: date={yesterday_tou.get('date')}, valley={yesterday_tou.get('valley')}, flat={yesterday_tou.get('flat')}, peak={yesterday_tou.get('peak')}, sharp={yesterday_tou.get('sharp')}"
+            )
         if month is None:
             logging.error(f"Get month power usage for {user_id} failed, pass")
 
@@ -451,6 +455,9 @@ class DataFetcher:
                     for key in ["valley", "flat", "peak", "sharp"]:
                         if record.get(key) is not None:
                             month_tou[key] += record.get(key)
+            logging.info(
+                f"Current month TOU summary: total={month_tou.get('total')}, valley={month_tou.get('valley')}, flat={month_tou.get('flat')}, peak={month_tou.get('peak')}, sharp={month_tou.get('sharp')}"
+            )
 
         # 找到当月1号的记录，存在则上报历史
         first_day_history = None
@@ -656,37 +663,50 @@ class DataFetcher:
             # 展开当日详情获取谷/平/峰/尖
             try:
                 expand_btn = row.find_element(By.XPATH, ".//span[contains(@class,'el-table__expand-icon')]")
-                driver.execute_script("arguments[0].click();", expand_btn)
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-                detail_row = row.find_element(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
-                detail_items = detail_row.find_elements(By.TAG_NAME, "li")
-                for item in detail_items:
-                    text = item.text
-                    number_match = re.search(r"([0-9]+\.?[0-9]*)", text)
-                    if not number_match:
-                        continue
-                    value = float(number_match.group(1))
-                    if "谷" in text:
-                        valley = value
-                    elif "平" in text:
-                        flat = value
-                    elif "峰" in text:
-                        peak = value
-                    elif "尖" in text:
-                        sharp = value
+                # 先滚动到视区，再点击，失败重试一次
+                for attempt in range(2):
+                    try:
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_btn)
+                        time.sleep(0.5)
+                        driver.execute_script("arguments[0].click();", expand_btn)
+                        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                        detail_row = row.find_element(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
+                        detail_items = detail_row.find_elements(By.TAG_NAME, "li")
+                        for item in detail_items:
+                            text = item.text
+                            number_match = re.search(r"([0-9]+\.?[0-9]*)", text)
+                            if not number_match:
+                                continue
+                            value = float(number_match.group(1))
+                            if "谷" in text:
+                                valley = value
+                            elif "平" in text:
+                                flat = value
+                            elif "峰" in text:
+                                peak = value
+                            elif "尖" in text:
+                                sharp = value
+                        break
+                    except Exception as inner_e:
+                        logging.debug(f"Expand attempt {attempt+1} failed for {day_text}: {inner_e}")
+                        if attempt == 1:
+                            raise
+                        time.sleep(1)
             except Exception as e:
                 logging.debug(f"Expand day detail failed, only total is available: {e}")
 
-            records.append(
-                {
-                    "date": day_text,
-                    "total": total,
-                    "valley": valley,
-                    "flat": flat,
-                    "peak": peak,
-                    "sharp": sharp,
-                }
+            record = {
+                "date": day_text,
+                "total": total,
+                "valley": valley,
+                "flat": flat,
+                "peak": peak,
+                "sharp": sharp,
+            }
+            logging.info(
+                f"Daily record parsed: date={day_text}, total={total}, valley={valley}, flat={flat}, peak={peak}, sharp={sharp}"
             )
+            records.append(record)
         return records
 
     def _save_user_data(self, user_id, balance, last_daily_date, last_daily_usage, date, usages, month, month_usage, month_charge, yearly_charge, yearly_usage):
