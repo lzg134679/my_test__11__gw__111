@@ -828,12 +828,15 @@ class DataFetcher:
             else:
                 for attempt in range(2):
                     try:
+                        logging.info(f"1")
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_btn)
                         time.sleep(0.5)
                         try:
+                            logging.info(f"2")
                             WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(EC.element_to_be_clickable(expand_btn))
                             expand_btn.click()
                         except Exception:
+                            logging.info(f"2-e")
                             driver.execute_script("arguments[0].click();", expand_btn)
 
                         if not took_detail_snapshot:
@@ -841,16 +844,20 @@ class DataFetcher:
                             took_detail_snapshot = True
 
                         try:
+                            logging.info(f"3")
                             WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(
                                 lambda d: len(row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]") ) > 0
                             )
                         except Exception:
+                            logging.info(f"3-e")
                             continue
 
                         try:
+                            logging.info(f"4")
                             driver.implicitly_wait(0)
                             detail_rows = row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
                         finally:
+                            logging.info(f"4-f")
                             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
 
                         if not detail_rows:
@@ -858,6 +865,7 @@ class DataFetcher:
                                 self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_rows")
                             continue
 
+                        logging.info(f"5")
                         detail_row = detail_rows[0]
                         detail_items = detail_row.find_elements(By.XPATH, ".//li")
                         if not detail_items and attempt == 1:
@@ -870,6 +878,7 @@ class DataFetcher:
                             if not number_match:
                                 continue
                             value = float(number_match.group(1))
+                            logging.info(f"6: {text} -> {value}")
                             if "谷" in text:
                                 valley = value
                             elif "平" in text:
@@ -897,16 +906,19 @@ class DataFetcher:
                         flat = flat if flat is not None else _extract_by_keyword("平用电")
                         peak = peak if peak is not None else _extract_by_keyword("峰用电")
                         sharp = sharp if sharp is not None else _extract_by_keyword("尖用电")
+                        logging.info(f"6-2")
                         break
                     except Exception as inner_e:
                         logging.debug(f"展开 {day_text} 尝试 {attempt+1} 失败: {inner_e}")
                         if attempt == 1:
                             if not took_detail_snapshot:
+                                logging.info(f"7")
                                 self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_failed")
                             raise
                         time.sleep(1)
                 else:
                     if not took_detail_snapshot:
+                        logging.info(f"8")
                         self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_unresolved")
                         took_detail_snapshot = True
 
