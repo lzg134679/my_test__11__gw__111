@@ -104,6 +104,7 @@ class DataFetcher:
         self.DETAIL_WAIT_TIME = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 3))
         # 等待滑块图片加载时间，防止空白导致 distance=0
         self.SLIDER_IMAGE_WAIT = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 5))
+        self.SNAPSHOT_DIR = "/config/gwkz"
         self.IGNORE_USER_ID = os.getenv("IGNORE_USER_ID", "xxxxx,xxxxx").split(",")
 
     # @staticmethod
@@ -214,6 +215,23 @@ class DataFetcher:
             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
         return driver
 
+    def _dump_snapshot(self, driver, prefix: str):
+        """保存当前页面 HTML 快照到 /config/gwkz，便于调试。"""
+        try:
+            os.makedirs(self.SNAPSHOT_DIR, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            html_path = os.path.join(self.SNAPSHOT_DIR, f"{prefix}_{ts}.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            png_path = os.path.join(self.SNAPSHOT_DIR, f"{prefix}_{ts}.png")
+            try:
+                driver.save_screenshot(png_path)
+            except Exception as ss_err:
+                logging.debug(f"保存截图失败: {ss_err}")
+            logging.info(f"已保存页面快照: {html_path} 和截图: {png_path}")
+        except Exception as e:
+            logging.debug(f"保存页面快照失败: {e}")
+
     @ErrorWatcher.watch
     def _login(self, driver, phone_code = False):
         try:
@@ -262,6 +280,7 @@ class DataFetcher:
             logging.info("点击登录按钮。\r")
             # sometimes ddddOCR may fail, so add retry logic)
             for retry_times in range(1, self.RETRY_TIMES_LIMIT + 1):
+                self._dump_snapshot(driver, f"slider_attempt_{retry_times}")
                 logging.info(f"开始滑块尝试 {retry_times}/{self.RETRY_TIMES_LIMIT}。")
                 # 进入滑块模式前先确认入口存在，避免元素缺失导致报错
                 try:
