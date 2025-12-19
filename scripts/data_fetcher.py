@@ -772,9 +772,20 @@ class DataFetcher:
         time.sleep(self.DETAIL_WAIT_TIME)
         logging.info("日用电标签就绪，等待数据行出现。")
 
-        # 等待第一行出现
+        # 页面上方是折线图，真实表格在下方，需要滚动到表格区域再等待行出现
+        try:
+            chart_anchor = driver.find_element(By.XPATH, "//div[@class='el-tab-pane dayd']//div[contains(@class,'echarts')]//canvas | //div[@class='el-tab-pane dayd']//div[contains(@class,'chart')]")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'end'});", chart_anchor)
+            time.sleep(0.5)
+            driver.execute_script("window.scrollBy(0, 600);")
+        except Exception:
+            # 即便找不到锚点也继续，让后续等待去兜底
+            driver.execute_script("window.scrollBy(0, 800);")
+            time.sleep(0.5)
+
+        # 等待第一行出现（表格在下方，需滚动后再等）
         first_row = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
-            EC.presence_of_element_located((By.XPATH, "//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row')]"))
+            EC.presence_of_element_located((By.XPATH, "//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and not(contains(@class,'el-table__expanded-row'))]"))
         )
         WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(first_row))
 
@@ -782,6 +793,9 @@ class DataFetcher:
             By.XPATH,
             "//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and not(contains(@class,'el-table__expanded-row'))]",
         )
+        if not rows:
+            self._dump_snapshot(driver, "daily_table_not_found_after_scroll")
+            logging.debug("未找到日数据行，已截图 daily_table_not_found_after_scroll。")
         logging.info(f"检测到 {len(rows)} 条日数据，开始解析。")
 
         for row in rows:
