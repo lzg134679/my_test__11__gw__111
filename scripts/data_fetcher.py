@@ -496,7 +496,6 @@ class DataFetcher:
         else:
             logging.info(
                 f"获取户号 {user_id} 年电费成功，费用 {yearly_charge} 元。")
-        self._dump_snapshot(driver, f"yearly_{user_id}")
 
         # 按月获取数据
         month, month_usage, month_charge = self._get_month_usage(driver)
@@ -505,7 +504,6 @@ class DataFetcher:
         else:
             for m in range(len(month)):
                 logging.info(f"获取户号 {user_id} {month[m]} 数据成功，用电 {month_usage[m]} kWh，电费 {month_charge[m]} 元。")
-        self._dump_snapshot(driver, f"month_{user_id}")
         # 近30天日用电（含谷/平/峰/尖）
         daily_records = self._get_daily_usage_data(driver)
         last_daily_date = None
@@ -533,7 +531,6 @@ class DataFetcher:
             )
         if month is None:
             logging.error(f"获取户号 {user_id} 月用电失败，跳过。")
-        self._dump_snapshot(driver, f"daily_{user_id}")
 
         # 当月分时段汇总（仅当前月）
         month_tou = None
@@ -760,6 +757,7 @@ class DataFetcher:
                 continue
 
             valley = flat = peak = sharp = None
+            took_detail_snapshot = False
             # 展开当日详情获取谷/平/峰/尖（需点击行最右侧的箭头按钮）
             try:
                 # ElementUI 展开箭头通常是 button.el-table__expand-icon，span 不一定可点击
@@ -775,8 +773,30 @@ class DataFetcher:
                             expand_btn.click()
                         except Exception:
                             driver.execute_script("arguments[0].click();", expand_btn)
-                        time.sleep(self.DETAIL_WAIT_TIME)
-                        detail_row = row.find_element(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
+                        # 点击后立即截一次图，方便排查详情缺失
+                        if not took_detail_snapshot:
+                            self._dump_snapshot(driver, f"daily_detail_{day_text}_attempt{attempt+1}")
+                            took_detail_snapshot = True
+
+                        # 等待展开行出现，显式等待避免隐式 60s 的长阻塞
+                        try:
+                            WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(
+                                lambda d: len(row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]") ) > 0
+                            )
+                        except Exception:
+                            continue
+
+                        # 临时关闭隐式等待，加快未出现时的退出
+                        try:
+                            driver.implicitly_wait(0)
+                            detail_rows = row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
+                        finally:
+                            driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
+
+                        if not detail_rows:
+                            continue
+
+                        detail_row = detail_rows[0]
                         detail_items = detail_row.find_elements(By.TAG_NAME, "li")
                         for item in detail_items:
                             text = item.text
