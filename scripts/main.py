@@ -1,13 +1,38 @@
+import glob
 import logging
 import logging.config
 import os
+import shutil
 import sys
 import time
 import schedule
 import json
 import random
+from datetime import datetime, timedelta
+
+
+def apply_local_overrides():
+    """Copy local debug scripts from /config/gwkz/scripts into the container."""
+    override_dir = "/config/gwkz/scripts"
+    target_dir = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.isdir(override_dir):
+        return
+    override_files = [p for p in glob.glob(os.path.join(override_dir, "*.py")) if os.path.isfile(p)]
+    if not override_files:
+        return
+    print(f"[override] Found {len(override_files)} .py file(s) in {override_dir}, copying into container...")
+    for src in override_files:
+        dest = os.path.join(target_dir, os.path.basename(src))
+        try:
+            shutil.copy2(src, dest)
+            print(f"[override] Updated {dest} from {src}")
+        except Exception as exc:
+            print(f"[override] Failed to copy {src}: {exc}")
+
+
+apply_local_overrides()
+
 from error_watcher import ErrorWatcher
-from datetime import datetime,timedelta
 from const import *
 from data_fetcher import DataFetcher
 
