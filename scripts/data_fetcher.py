@@ -814,7 +814,7 @@ class DataFetcher:
             try:
                 expand_btn = row.find_element(
                     By.XPATH,
-                    ".//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')]",
+                    "(.//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')] | .//td[last()]//*[contains(@class,'arrow') or contains(@class,'caret') or contains(@class,'el-icon')])[1]",
                 )
             except Exception:
                 expand_btn = None
