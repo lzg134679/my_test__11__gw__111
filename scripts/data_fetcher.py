@@ -261,8 +261,18 @@ class DataFetcher:
             # sometimes ddddOCR may fail, so add retry logic)
             for retry_times in range(1, self.RETRY_TIMES_LIMIT + 1):
                 logging.info(f"开始滑块尝试 {retry_times}/{self.RETRY_TIMES_LIMIT}。")
-                
-                self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
+                # 进入滑块模式前先确认入口存在，避免元素缺失导致报错
+                try:
+                    slider_tab = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
+                        EC.presence_of_element_located((By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span'))
+                    )
+                    slider_tab.click()
+                except Exception as tab_err:
+                    logging.warning(f"未找到滑块入口，刷新重试: {tab_err}")
+                    driver.get(LOGIN_URL)
+                    time.sleep(self.DETAIL_WAIT_TIME)
+                    continue
+
                 #get canvas image
                 background_JS = 'return document.getElementById("slideVerify").childNodes[0].toDataURL("image/png");'
                 # targe_JS = 'return document.getElementsByClassName("slide-verify-block")[0].toDataURL("image/png");'
@@ -273,6 +283,13 @@ class DataFetcher:
                 logging.info(f"获取滑块背景图成功。\r")
                 distance = self.onnx.get_distance(background_image)
                 logging.info(f"识别滑块缺口距离: {distance}。\r")
+
+                # 模型返回 0 视为未识别，直接重试，避免无效拖动
+                if distance == 0:
+                    logging.warning("滑块缺口未识别到，刷新后重试。")
+                    driver.get(LOGIN_URL)
+                    time.sleep(self.DETAIL_WAIT_TIME)
+                    continue
 
                 self._sliding_track(driver, round(distance*1.06)) #1.06是补偿
                 time.sleep(self.DETAIL_WAIT_TIME)
