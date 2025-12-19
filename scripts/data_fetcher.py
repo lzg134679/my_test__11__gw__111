@@ -102,6 +102,8 @@ class DataFetcher:
         self.RETRY_WAIT_TIME_OFFSET_UNIT = int(os.getenv("RETRY_WAIT_TIME_OFFSET_UNIT", 10))
         # Faster waits for inner table expansion to avoid long per-row delays
         self.DETAIL_WAIT_TIME = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 3))
+        # 等待滑块图片加载时间，防止空白导致 distance=0
+        self.SLIDER_IMAGE_WAIT = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 5))
         self.IGNORE_USER_ID = os.getenv("IGNORE_USER_ID", "xxxxx,xxxxx").split(",")
 
     # @staticmethod
@@ -266,12 +268,29 @@ class DataFetcher:
                     slider_tab = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
                         EC.presence_of_element_located((By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span'))
                     )
-                    slider_tab.click()
+                    try:
+                        WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(EC.element_to_be_clickable(slider_tab))
+                        slider_tab.click()
+                    except Exception:
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", slider_tab)
+                        driver.execute_script("arguments[0].click();", slider_tab)
                 except Exception as tab_err:
                     logging.warning(f"未找到滑块入口，刷新重试: {tab_err}")
                     driver.get(LOGIN_URL)
                     time.sleep(self.DETAIL_WAIT_TIME)
                     continue
+
+                # 等待滑块弹窗与画布可见，避免图片未加载
+                try:
+                    WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
+                        EC.visibility_of_element_located((By.ID, "slideVerify"))
+                    )
+                except Exception as modal_err:
+                    logging.warning(f"滑块弹窗未出现，刷新重试: {modal_err}")
+                    driver.get(LOGIN_URL)
+                    time.sleep(self.DETAIL_WAIT_TIME)
+                    continue
+                time.sleep(self.SLIDER_IMAGE_WAIT)
 
                 #get canvas image
                 background_JS = 'return document.getElementById("slideVerify").childNodes[0].toDataURL("image/png");'
