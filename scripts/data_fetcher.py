@@ -229,6 +229,27 @@ class DataFetcher:
         except Exception as e:
             logging.debug(f"保存页面截图失败: {e}")
 
+    def _restore_login_context(self, driver):
+        """刷新后重新回到账号密码登录并填充表单、点击登录，避免停留在扫码页。"""
+        try:
+            driver.get(LOGIN_URL)
+            time.sleep(self.DETAIL_WAIT_TIME)
+            driver.find_element(By.CLASS_NAME, "user").click()
+            time.sleep(0.5)
+            self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
+            time.sleep(0.5)
+            self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[1]/form/div[1]/div[3]/div/span[2]')
+            time.sleep(0.5)
+            inputs = driver.find_elements(By.CLASS_NAME, "el-input__inner")
+            if len(inputs) >= 2:
+                inputs[0].clear(); inputs[0].send_keys(self._username)
+                inputs[1].clear(); inputs[1].send_keys(self._password)
+            self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
+            time.sleep(self.DETAIL_WAIT_TIME)
+            logging.info("刷新后已回到账密登录并重新点击登录，等待滑块。")
+        except Exception as e:
+            logging.warning(f"刷新后恢复登录环境失败: {e}")
+
     def _is_logged_in(self, driver):
         """判断是否已登录，优先检查跳转，其次检查主页元素。"""
         if LOGIN_URL not in driver.current_url:
@@ -311,8 +332,7 @@ class DataFetcher:
                         driver.execute_script("arguments[0].click();", slider_tab)
                 except Exception as tab_err:
                     logging.warning(f"未找到滑块入口，刷新重试: {tab_err}")
-                    driver.get(LOGIN_URL)
-                    time.sleep(self.DETAIL_WAIT_TIME)
+                    self._restore_login_context(driver)
                     continue
 
                 # 等待滑块弹窗与画布可见，避免图片未加载
@@ -322,8 +342,7 @@ class DataFetcher:
                     )
                 except Exception as modal_err:
                     logging.warning(f"滑块弹窗未出现，刷新重试: {modal_err}")
-                    driver.get(LOGIN_URL)
-                    time.sleep(self.DETAIL_WAIT_TIME)
+                    self._restore_login_context(driver)
                     continue
                 time.sleep(self.SLIDER_IMAGE_WAIT)
 
@@ -340,9 +359,29 @@ class DataFetcher:
 
                 # 模型返回 0 视为未识别，直接重试，避免无效拖动
                 if distance == 0:
-                    logging.warning("滑块缺口未识别到，刷新后重试。")
-                    driver.get(LOGIN_URL)
-                    time.sleep(self.DETAIL_WAIT_TIME)
+                    logging.warning("滑块缺口未识别到，刷新验证码重试。")
+                    try:
+                        refresh_btn = None
+                        for selector in ["#slideVerify .slide-verify-refresh-icon", ".slide-verify-refresh-icon",
+                                         "#slideVerify .el-icon-refresh", "//*[@id='slideVerify']//i[contains(@class,'refresh')]"]:
+                            try:
+                                if selector.startswith("//"):
+                                    refresh_btn = driver.find_element(By.XPATH, selector)
+                                elif selector.startswith("#") or selector.startswith("."):
+                                    refresh_btn = driver.find_element(By.CSS_SELECTOR, selector)
+                                if refresh_btn:
+                                    break
+                            except Exception:
+                                continue
+                        if refresh_btn:
+                            driver.execute_script("arguments[0].click();", refresh_btn)
+                            time.sleep(self.SLIDER_IMAGE_WAIT)
+                        else:
+                            logging.debug("未找到刷新按钮，改为重新加载登录页。")
+                            self._restore_login_context(driver)
+                    except Exception as refresh_err:
+                        logging.debug(f"刷新验证码失败，改为重新加载登录页: {refresh_err}")
+                        self._restore_login_context(driver)
                     continue
 
                 self._sliding_track(driver, round(distance*1.06)) #1.06是补偿
@@ -361,8 +400,7 @@ class DataFetcher:
                 except Exception:
                     logging.debug(
                         f"重新点击登录失败，刷新页面重试，剩余 {self.RETRY_TIMES_LIMIT - retry_times} 次重试。")
-                    driver.get(LOGIN_URL)
-                    time.sleep(self.DETAIL_WAIT_TIME)
+                    self._restore_login_context(driver)
                 continue
             logging.error(f"登录失败，可能因滑块校验未通过。")
         return False
