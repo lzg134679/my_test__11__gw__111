@@ -798,25 +798,34 @@ class DataFetcher:
             took_detail_snapshot = False
             # 展开当日详情获取谷/平/峰/尖（需点击行最右侧的箭头按钮）
             try:
-                # ElementUI 展开箭头通常是 button.el-table__expand-icon，span 不一定可点击
-                expand_btn = row.find_element(By.XPATH, ".//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')]")
-                # 先滚动到视区，再点击，失败重试一次
+                expand_btn = row.find_element(
+                    By.XPATH,
+                    ".//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')]",
+                )
+            except Exception:
+                expand_btn = None
+
+            if not expand_btn:
+                # 无展开按钮也截个图方便排查 DOM 结构
+                if not took_detail_snapshot:
+                    self._dump_snapshot(driver, f"daily_detail_{day_text}_no_expand_btn")
+                    took_detail_snapshot = True
+                logging.debug(f"未找到 {day_text} 的展开按钮，跳过谷/平/峰/尖解析。")
+            else:
                 for attempt in range(2):
                     try:
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_btn)
                         time.sleep(0.5)
-                        # 优先用可点击等待再点击，失败再用 JS click
                         try:
                             WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(EC.element_to_be_clickable(expand_btn))
                             expand_btn.click()
                         except Exception:
                             driver.execute_script("arguments[0].click();", expand_btn)
-                        # 点击后立即截一次图，方便排查详情缺失
+
                         if not took_detail_snapshot:
                             self._dump_snapshot(driver, f"daily_detail_{day_text}_attempt{attempt+1}")
                             took_detail_snapshot = True
 
-                        # 等待展开行出现，显式等待避免隐式 60s 的长阻塞
                         try:
                             WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(
                                 lambda d: len(row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]") ) > 0
@@ -824,7 +833,6 @@ class DataFetcher:
                         except Exception:
                             continue
 
-                        # 临时关闭隐式等待，加快未出现时的退出
                         try:
                             driver.implicitly_wait(0)
                             detail_rows = row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
@@ -832,10 +840,15 @@ class DataFetcher:
                             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
 
                         if not detail_rows:
+                            if attempt == 1:
+                                self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_rows")
                             continue
 
                         detail_row = detail_rows[0]
-                        detail_items = detail_row.find_elements(By.TAG_NAME, "li")
+                        detail_items = detail_row.find_elements(By.XPATH, ".//li")
+                        if not detail_items and attempt == 1:
+                            self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_items")
+
                         for item in detail_items:
                             text = item.text
                             number_match = re.search(r"([0-9]+\.?[0-9]*)", text)
@@ -854,10 +867,14 @@ class DataFetcher:
                     except Exception as inner_e:
                         logging.debug(f"展开 {day_text} 尝试 {attempt+1} 失败: {inner_e}")
                         if attempt == 1:
+                            if not took_detail_snapshot:
+                                self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_failed")
                             raise
                         time.sleep(1)
-            except Exception as e:
-                logging.debug(f"展开日详情失败，仅总用电可用: {e}")
+                else:
+                    if not took_detail_snapshot:
+                        self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_unresolved")
+                        took_detail_snapshot = True
 
             record = {
                 "date": day_text,
