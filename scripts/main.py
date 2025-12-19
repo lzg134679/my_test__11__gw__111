@@ -16,22 +16,20 @@ def apply_local_overrides():
     override_dir = "/config/gwkz/scripts"
     target_dir = os.path.dirname(os.path.abspath(__file__))
     if not os.path.isdir(override_dir):
-        logging.info(f"正常运行在非 Home Assistant 环境，跳过本地脚本覆盖步骤。")
+        print(f"正常运行在非 Home Assistant 环境，跳过本地脚本覆盖步骤。")
         return
     override_files = [p for p in glob.glob(os.path.join(override_dir, "*.py")) if os.path.isfile(p)]
     if not override_files:
-        logging.info(f"在 {override_dir} 中未找到任何 .py 文件，跳过本地脚本覆盖步骤。")
+        print(f"在 {override_dir} 中未找到任何 .py 文件，跳过本地脚本覆盖步骤。")
         return
-    print(f"[override] Found {len(override_files)} .py file(s) in {override_dir}, copying into container...")
+    print(f"[覆盖运行] Found {len(override_files)} .py file(s) in {override_dir}, copying into container...")
     for src in override_files:
         dest = os.path.join(target_dir, os.path.basename(src))
         try:
             shutil.copy2(src, dest)
-            print(f"[override] Updated {dest} from {src}")
-            logging.info(f"[覆盖运行] Updated {dest} from {src}")
+            print(f"[覆盖运行] Updated {dest} from {src}")
         except Exception as exc:
-            print(f"[override] Failed to copy {src}: {exc}")
-            logging.error(f"[覆盖运行] Failed to copy {src}: {exc}")
+            print(f"[覆盖运行] Failed to copy {src}: {exc}")
 
 apply_local_overrides()
 
