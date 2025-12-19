@@ -16,7 +16,7 @@ COPY scripts/* /app/
 WORKDIR /app
 
 RUN apt-get --allow-releaseinfo-change update \
-    && apt-get install -y --no-install-recommends jq firefox-esr tzdata curl ca-certificates \
+    && apt-get install -y --no-install-recommends jq firefox-esr tzdata curl ca-certificates fonts-wqy-zenhei fonts-wqy-microhei fonts-noto-cjk \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
     && dpkg-reconfigure --frontend noninteractive tzdata \
