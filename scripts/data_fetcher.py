@@ -863,6 +863,7 @@ class DataFetcher:
                         if not detail_items and attempt == 1:
                             self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_items")
 
+                        # 先尝试从 li 里提取
                         for item in detail_items:
                             text = item.text
                             number_match = re.search(r"([0-9]+\.?[0-9]*)", text)
@@ -877,6 +878,25 @@ class DataFetcher:
                                 peak = value
                             elif "尖" in text:
                                 sharp = value
+
+                        # 部分页面使用 div/span 文本（如 “谷用电：16.44”），增加直接搜索关键词兜底
+                        def _extract_by_keyword(keyword: str):
+                            xpath_candidates = [
+                                f".//*[contains(text(), '{keyword}')]",
+                                f".//span[contains(text(), '{keyword}')]",
+                                f".//div[contains(text(), '{keyword}')]",
+                            ]
+                            for xp in xpath_candidates:
+                                for elem in detail_row.find_elements(By.XPATH, xp):
+                                    m = re.search(r"([0-9]+\.?[0-9]*)", elem.text)
+                                    if m:
+                                        return float(m.group(1))
+                            return None
+
+                        valley = valley if valley is not None else _extract_by_keyword("谷用电")
+                        flat = flat if flat is not None else _extract_by_keyword("平用电")
+                        peak = peak if peak is not None else _extract_by_keyword("峰用电")
+                        sharp = sharp if sharp is not None else _extract_by_keyword("尖用电")
                         break
                     except Exception as inner_e:
                         logging.debug(f"展开 {day_text} 尝试 {attempt+1} 失败: {inner_e}")
