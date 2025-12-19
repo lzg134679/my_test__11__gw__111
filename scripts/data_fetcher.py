@@ -19,6 +19,7 @@ from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 from sensor_updator import SensorUpdator
 from error_watcher import ErrorWatcher
 
@@ -105,6 +106,7 @@ class DataFetcher:
         # 等待滑块图片加载时间，防止空白导致 distance=0
         self.SLIDER_IMAGE_WAIT = max(1, min(self.RETRY_WAIT_TIME_OFFSET_UNIT, 5))
         self.SNAPSHOT_DIR = "/config/gwkz"
+        self.snapshot_session_dir = None
         self.IGNORE_USER_ID = os.getenv("IGNORE_USER_ID", "xxxxx,xxxxx").split(",")
 
     # @staticmethod
@@ -216,21 +218,35 @@ class DataFetcher:
         return driver
 
     def _dump_snapshot(self, driver, prefix: str):
-        """保存当前页面 HTML 快照到 /config/gwkz，便于调试。"""
+        """保存当前页面截图到 /config/gwkz，便于调试。"""
         try:
-            os.makedirs(self.SNAPSHOT_DIR, exist_ok=True)
+            base_dir = self.snapshot_session_dir or self.SNAPSHOT_DIR
+            os.makedirs(base_dir, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            html_path = os.path.join(self.SNAPSHOT_DIR, f"{prefix}_{ts}.html")
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-            png_path = os.path.join(self.SNAPSHOT_DIR, f"{prefix}_{ts}.png")
-            try:
-                driver.save_screenshot(png_path)
-            except Exception as ss_err:
-                logging.debug(f"保存截图失败: {ss_err}")
-            logging.info(f"已保存页面快照: {html_path} 和截图: {png_path}")
+            png_path = os.path.join(base_dir, f"{prefix}_{ts}.png")
+            driver.save_screenshot(png_path)
+            logging.info(f"已保存页面截图: {png_path}")
         except Exception as e:
-            logging.debug(f"保存页面快照失败: {e}")
+            logging.debug(f"保存页面截图失败: {e}")
+
+    def _is_logged_in(self, driver):
+        """判断是否已登录，优先检查跳转，其次检查主页元素。"""
+        if LOGIN_URL not in driver.current_url:
+            return True
+        try:
+            driver.find_element(By.CLASS_NAME, "el-dropdown")
+            return True
+        except Exception:
+            return False
+
+    def _wait_login_success(self, driver):
+        """等待登录成功信号，避免拖动后尚未跳转就误判失败。"""
+        wait_seconds = max(self.LOGIN_EXPECTED_TIME, self.DETAIL_WAIT_TIME)
+        try:
+            WebDriverWait(driver, wait_seconds).until(lambda d: self._is_logged_in(d))
+            return True
+        except TimeoutException:
+            return False
 
     @ErrorWatcher.watch
     def _login(self, driver, phone_code = False):
@@ -332,18 +348,22 @@ class DataFetcher:
                 self._sliding_track(driver, round(distance*1.06)) #1.06是补偿
                 time.sleep(self.DETAIL_WAIT_TIME)
                 logging.info("已拖动滑块，检查登录结果。")
-                if (driver.current_url == LOGIN_URL): # if login not success
-                    try:
-                        logging.info(f"滑块校验失败，刷新重试。\r")
-                        self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
-                        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-                        continue
-                    except:
-                        logging.debug(
-                            f"登录失败，剩余 {self.RETRY_TIMES_LIMIT - retry_times} 次重试。")
-                else:
+                if self._wait_login_success(driver):
                     logging.info("滑块验证通过，检测到登录成功。")
+                    self._dump_snapshot(driver, "after_login_success")
                     return True
+
+                # 未检测到登录成功，点击登录或刷新后重试
+                try:
+                    logging.info("滑块校验失败或未跳转，尝试重新点击登录再试。\r")
+                    self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
+                    time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                except Exception:
+                    logging.debug(
+                        f"重新点击登录失败，刷新页面重试，剩余 {self.RETRY_TIMES_LIMIT - retry_times} 次重试。")
+                    driver.get(LOGIN_URL)
+                    time.sleep(self.DETAIL_WAIT_TIME)
+                continue
             logging.error(f"登录失败，可能因滑块校验未通过。")
         return False
 
@@ -356,6 +376,12 @@ class DataFetcher:
 
         driver = self._get_webdriver()
         ErrorWatcher.instance().set_driver(driver)
+
+        # 为本次任务创建独立截图目录
+        self.snapshot_session_dir = os.path.join(
+            self.SNAPSHOT_DIR, f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        os.makedirs(self.snapshot_session_dir, exist_ok=True)
         
         driver.maximize_window() 
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
@@ -450,6 +476,7 @@ class DataFetcher:
         else:
             logging.info(
                 f"获取户号 {user_id} 余额成功，余额 {balance} 元。")
+        self._dump_snapshot(driver, f"balance_{user_id}")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         # swithc to electricity usage page
         driver.get(ELECTRIC_USAGE_URL)
@@ -469,6 +496,7 @@ class DataFetcher:
         else:
             logging.info(
                 f"获取户号 {user_id} 年电费成功，费用 {yearly_charge} 元。")
+        self._dump_snapshot(driver, f"yearly_{user_id}")
 
         # 按月获取数据
         month, month_usage, month_charge = self._get_month_usage(driver)
@@ -477,6 +505,7 @@ class DataFetcher:
         else:
             for m in range(len(month)):
                 logging.info(f"获取户号 {user_id} {month[m]} 数据成功，用电 {month_usage[m]} kWh，电费 {month_charge[m]} 元。")
+        self._dump_snapshot(driver, f"month_{user_id}")
         # 近30天日用电（含谷/平/峰/尖）
         daily_records = self._get_daily_usage_data(driver)
         last_daily_date = None
@@ -504,6 +533,7 @@ class DataFetcher:
             )
         if month is None:
             logging.error(f"获取户号 {user_id} 月用电失败，跳过。")
+        self._dump_snapshot(driver, f"daily_{user_id}")
 
         # 当月分时段汇总（仅当前月）
         month_tou = None
