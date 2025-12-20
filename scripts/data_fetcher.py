@@ -276,12 +276,12 @@ class DataFetcher:
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of_element_located((By.CLASS_NAME, "user")))
         except:
             logging.debug(f"登录页打开失败，无法访问 {LOGIN_URL}。")
-        time.sleep(1)
+        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         # swtich to username-password login page
         driver.find_element(By.CLASS_NAME, "user").click()
         logging.info("切换到账号密码登录页。\r")
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
-        time.sleep(2)
+        time.sleep(3)
         # click agree button
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[1]/form/div[1]/div[3]/div/span[2]')
         logging.info("点击同意协议。\r")
