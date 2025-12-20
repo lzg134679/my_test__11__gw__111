@@ -1,5 +1,5 @@
 name: "我的测试"
-version: "2.1.0"
+version: "2.1.1"
 slug: "my_gw_data"
 description: "获取国网电费数据的插件"
 url: "https://github.com/lzg134679/my_test__11__gw__111"
