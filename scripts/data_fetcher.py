@@ -138,7 +138,6 @@ class DataFetcher:
         # for t in tracks:
         yoffset_random = random.uniform(-2, 4)
         ActionChains(driver).move_by_offset(xoffset=distance, yoffset=yoffset_random).perform()
-            # time.sleep(0.2)
         ActionChains(driver).release().perform()
 
     def connect_user_db(self, user_id):
@@ -235,11 +234,11 @@ class DataFetcher:
             driver.get(LOGIN_URL)
             time.sleep(self.DETAIL_WAIT_TIME)
             driver.find_element(By.CLASS_NAME, "user").click()
-            time.sleep(0.5)
+            time.sleep(2)
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
-            time.sleep(0.5)
+            time.sleep(2)
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[1]/form/div[1]/div[3]/div/span[2]')
-            time.sleep(0.5)
+            time.sleep(2)
             inputs = driver.find_elements(By.CLASS_NAME, "el-input__inner")
             if len(inputs) >= 2:
                 inputs[0].clear(); inputs[0].send_keys(self._username)
@@ -273,20 +272,20 @@ class DataFetcher:
     def _login(self, driver, phone_code = False):
         try:
             driver.get(LOGIN_URL)
+            logging.info(f"打开登录页 {LOGIN_URL}。\r")
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of_element_located((By.CLASS_NAME, "user")))
         except:
             logging.debug(f"登录页打开失败，无法访问 {LOGIN_URL}。")
-        logging.info(f"打开登录页 {LOGIN_URL}。\r")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
+        time.sleep(1)
         # swtich to username-password login page
         driver.find_element(By.CLASS_NAME, "user").click()
         logging.info("切换到账号密码登录页。\r")
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[2]/span')
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(2)
         # click agree button
         self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[2]/div[1]/form/div[1]/div[3]/div/span[2]')
         logging.info("点击同意协议。\r")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(2)
         if phone_code:
             self._click_button(driver, By.XPATH, '//*[@id="login_box"]/div[1]/div[1]/div[3]/span')
             input_elements = driver.find_elements(By.CLASS_NAME, "el-input__inner")
@@ -309,12 +308,11 @@ class DataFetcher:
             logging.info(f"输入手机号: {self._username}\r")
             input_elements[1].send_keys(self._password)
             logging.info(f"输入密码: {self._password}\r")
-            logging.info("账号密码已填，准备点击登录并处理滑块。")
 
             # click login button
             self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
-            logging.info("点击登录按钮。\r")
+            logging.info("点击登录按钮，等待滑块图片加载\r")
+            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
             # sometimes ddddOCR may fail, so add retry logic)
             for retry_times in range(1, self.RETRY_TIMES_LIMIT + 1):
                 self._dump_snapshot(driver, f"slider_attempt_{retry_times}")
@@ -344,7 +342,7 @@ class DataFetcher:
                     logging.warning(f"滑块弹窗未出现，刷新重试: {modal_err}")
                     self._restore_login_context(driver)
                     continue
-                time.sleep(self.SLIDER_IMAGE_WAIT)
+                time.sleep(1)
 
                 #get canvas image
                 background_JS = 'return document.getElementById("slideVerify").childNodes[0].toDataURL("image/png");'
@@ -385,7 +383,7 @@ class DataFetcher:
                     continue
 
                 self._sliding_track(driver, round(distance*1.06)) #1.06是补偿
-                time.sleep(self.DETAIL_WAIT_TIME)
+                time.sleep(2)
                 logging.info("已拖动滑块，检查登录结果。")
                 if self._wait_login_success(driver):
                     logging.info("滑块验证通过，检测到登录成功。")
@@ -398,7 +396,7 @@ class DataFetcher:
                     self._click_button(driver, By.CLASS_NAME, "el-button.el-button--primary")
                     time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
                 except Exception:
-                    logging.debug(
+                    logging.error(
                         f"重新点击登录失败，刷新页面重试，剩余 {self.RETRY_TIMES_LIMIT - retry_times} 次重试。")
                     self._restore_login_context(driver)
                 continue
@@ -422,7 +420,6 @@ class DataFetcher:
         os.makedirs(self.snapshot_session_dir, exist_ok=True)
         
         driver.maximize_window() 
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         logging.info("浏览器驱动初始化完成。")
         updator = SensorUpdator()
         
@@ -446,42 +443,39 @@ class DataFetcher:
             return
 
         logging.info(f"已登录: {LOGIN_URL}")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
         logging.info(f"开始获取户号列表。")
         user_id_list = self._get_user_ids(driver)
         logging.info(f"共 {len(user_id_list)} 个户号: {user_id_list}，其中 {self.IGNORE_USER_ID} 将被忽略。")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
 
 
         for userid_index, user_id in enumerate(user_id_list):           
             try: 
                 # switch to electricity charge balance page
                 driver.get(BALANCE_URL) 
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                time.sleep(1)
                 self._choose_current_userid(driver,userid_index)
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                time.sleep(1)
                 current_userid = self._get_current_userid(driver)
                 if current_userid in self.IGNORE_USER_ID:
                     logging.info(f"户号 {current_userid} 在忽略列表中，跳过。")
                     continue
-                else:
-                    ### get data 
-                    balance, last_daily_date, last_daily_usage, yearly_charge, yearly_usage, month_charge, month_usage, yesterday_tou, month_tou, first_day_history  = self._get_all_data(driver, user_id, userid_index)
-                    updator.update_one_userid(
-                        user_id,
-                        balance,
-                        last_daily_date,
-                        last_daily_usage,
-                        yearly_charge,
-                        yearly_usage,
-                        month_charge,
-                        month_usage,
-                        yesterday_tou,
-                        month_tou,
-                        first_day_history,
-                    )
-        
-                    time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                ### get data 
+                balance, last_daily_date, last_daily_usage, yearly_charge, yearly_usage, month_charge, month_usage, yesterday_tou, month_tou, first_day_history  = self._get_all_data(driver, user_id, userid_index)
+                updator.update_one_userid(
+                    user_id,
+                    balance,
+                    last_daily_date,
+                    last_daily_usage,
+                    yearly_charge,
+                    yearly_usage,
+                    month_charge,
+                    month_usage,
+                    yesterday_tou,
+                    month_tou,
+                    first_day_history,
+                )
+
+                time.sleep(1)
             except Exception as e:
                 if (userid_index != len(user_id_list)):
                     logging.info(f"户号 {user_id} 拉取失败 {e}，继续下一个。")
@@ -501,9 +495,9 @@ class DataFetcher:
         elements = driver.find_elements(By.CLASS_NAME, "button_confirm")
         if elements:
             self._click_button(driver, By.XPATH, f'''//*[@id="app"]/div/div[2]/div/div/div/div[2]/div[2]/div/button''')
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(self.DETAIL_WAIT_TIME)
         self._click_button(driver, By.CLASS_NAME, "el-input__suffix")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(self.DETAIL_WAIT_TIME)
         self._click_button(driver, By.XPATH, f"/html/body/div[2]/div[1]/div[1]/ul/li[{userid_index+1}]/span")
         
 
@@ -515,12 +509,12 @@ class DataFetcher:
             logging.info(
                 f"获取户号 {user_id} 余额成功，余额 {balance} 元。")
         self._dump_snapshot(driver, f"balance_{user_id}")
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(1)
         # swithc to electricity usage page
         driver.get(ELECTRIC_USAGE_URL)
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(1)
         self._choose_current_userid(driver, userid_index)
-        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+        time.sleep(1)
         # get data for each user id
         yearly_usage, yearly_charge = self._get_yearly_data(driver)
 
@@ -536,6 +530,7 @@ class DataFetcher:
                 f"获取户号 {user_id} 年电费成功，费用 {yearly_charge} 元。")
 
         # 按月获取数据
+        logging.error(f"开始获取每月总用电")
         month, month_usage, month_charge = self._get_month_usage(driver)
         if month is None:
             logging.error(f"获取户号 {user_id} 月用电失败，跳过。")
@@ -632,22 +627,22 @@ class DataFetcher:
         try:
             # 刷新网页
             driver.refresh()
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT*2)
+            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
             element = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.presence_of_element_located((By.CLASS_NAME, 'el-dropdown')))
             # click roll down button for user id
             self._click_button(driver, By.XPATH, "//div[@class='el-dropdown']/span")
-            logging.debug(f"点击户号下拉按钮。")
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+            logging.info(f"点击户号下拉按钮。")
+            time.sleep(3)
             # wait for roll down menu displayed
             target = driver.find_element(By.CLASS_NAME, "el-dropdown-menu.el-popper").find_element(By.TAG_NAME, "li")
-            logging.debug(f"获取下拉菜单首个选项。")
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+            logging.info(f"获取下拉菜单首个选项。")
+            time.sleep(3)
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
-            logging.debug(f"等待下拉菜单可见。")
+            time.sleep(0.1)
+            logging.info(f"等待下拉菜单可见。")
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
                 EC.text_to_be_present_in_element((By.XPATH, "//ul[@class='el-dropdown-menu el-popper']/li"), ":"))
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+            time.sleep(0.1)
 
             # get user id one by one
             userid_elements = driver.find_element(By.CLASS_NAME, "el-dropdown-menu.el-popper").find_elements(By.TAG_NAME, "li")
@@ -729,13 +724,13 @@ class DataFetcher:
 
         try:
             self._click_button(driver, By.XPATH, "//div[@class='el-tabs__nav is-top']/div[@id='tab-first']")
-            time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+            time.sleep(self.DETAIL_WAIT_TIME)
             if datetime.now().month == 1:
                 self._click_button(driver, By.XPATH, '//*[@id="pane-first"]/div[1]/div/div[1]/div/div/input')
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                time.sleep(self.DETAIL_WAIT_TIME)
                 span_element = driver.find_element(By.XPATH, f"//span[contains(text(), '{datetime.now().year - 1}')]")
                 span_element.click()
-                time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
+                time.sleep(self.DETAIL_WAIT_TIME)
             # wait for month displayed
             target = driver.find_element(By.CLASS_NAME, "total")
             WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
@@ -776,12 +771,12 @@ class DataFetcher:
         try:
             chart_anchor = driver.find_element(By.XPATH, "//div[@class='el-tab-pane dayd']//div[contains(@class,'echarts')]//canvas | //div[@class='el-tab-pane dayd']//div[contains(@class,'chart')]")
             driver.execute_script("arguments[0].scrollIntoView({block: 'end'});", chart_anchor)
-            time.sleep(0.5)
+            time.sleep(0.2)
             driver.execute_script("window.scrollBy(0, 600);")
         except Exception:
             # 即便找不到锚点也继续，让后续等待去兜底
             driver.execute_script("window.scrollBy(0, 800);")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         # 等待第一行出现（表格在下方，需滚动后再等）
         first_row = WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
@@ -814,7 +809,7 @@ class DataFetcher:
             try:
                 expand_btn = row.find_element(
                     By.XPATH,
-                    "(.//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')] | .//td[last()]//*[contains(@class,'arrow') or contains(@class,'caret') or contains(@class,'el-icon')])[1]",
+                    "(.//button[contains(@class,'el-table__expand-icon')] | .//span[contains(@class,'el-table__expand-icon')] | .//div[contains(@class,'el-table__expand-icon')] | .//td[last()]//*[contains(@class,'arrow') or contains(@class,'caret') or contains(@class,'el-icon')])[1]",
                 )
             except Exception:
                 expand_btn = None
@@ -828,15 +823,12 @@ class DataFetcher:
             else:
                 for attempt in range(2):
                     try:
-                        logging.info(f"1")
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_btn)
                         time.sleep(0.5)
                         try:
-                            logging.info(f"2")
                             WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(EC.element_to_be_clickable(expand_btn))
                             expand_btn.click()
                         except Exception:
-                            logging.info(f"2-e")
                             driver.execute_script("arguments[0].click();", expand_btn)
 
                         if not took_detail_snapshot:
@@ -845,12 +837,11 @@ class DataFetcher:
 
                         # 使用日期重新定位行以避免展开后原行失效
                         try:
-                            logging.info(f"3")
                             WebDriverWait(driver, max(self.DETAIL_WAIT_TIME, 5)).until(
                                 lambda d: len(
                                     d.find_elements(
                                         By.XPATH,
-                                        f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1][contains(@class,'el-table__expanded-row')]",
+                                        f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1]/td[contains(@class,'el-table__expanded-cell')]",
                                     )
                                 )
                                 > 0
@@ -860,14 +851,12 @@ class DataFetcher:
                             continue
 
                         try:
-                            logging.info(f"4")
                             driver.implicitly_wait(0)
                             detail_rows = driver.find_elements(
                                 By.XPATH,
-                                f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1][contains(@class,'el-table__expanded-row')]",
+                                f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1]/td[contains(@class,'el-table__expanded-cell')]",
                             )
                         finally:
-                            logging.info(f"4-f")
                             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
 
                         if not detail_rows:
@@ -875,30 +864,36 @@ class DataFetcher:
                                 self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_rows")
                             continue
 
-                        logging.info(f"5")
-                        detail_row = detail_rows[0]
-                        detail_items = detail_row.find_elements(By.XPATH, ".//li")
-                        if not detail_items and attempt == 1:
-                            self._dump_snapshot(driver, f"daily_detail_{day_text}_no_detail_items")
+                        detail_cell = detail_rows[0]
+                        try:
+                            WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(
+                                EC.presence_of_element_located(
+                                    (
+                                        By.XPATH,
+                                        ".//div[contains(@class,'drop-box')]/div[contains(@class,'drop-box-left')]//p",
+                                    )
+                                )
+                            )
+                        except Exception:
+                            # 即便没等到也继续尝试解析
+                            pass
 
-                        # 先尝试从 li 里提取
-                        for item in detail_items:
-                            text = item.text
-                            number_match = re.search(r"([0-9]+\.?[0-9]*)", text)
-                            if not number_match:
-                                continue
-                            value = float(number_match.group(1))
-                            logging.info(f"6: {text} -> {value}")
-                            if "谷" in text:
-                                valley = value
-                            elif "平" in text:
-                                flat = value
-                            elif "峰" in text:
-                                peak = value
-                            elif "尖" in text:
-                                sharp = value
+                        def _extract_from_paragraph(label: str):
+                            elems = detail_cell.find_elements(
+                                By.XPATH,
+                                f".//div[contains(@class,'drop-box-left')]//p[.//*[contains(text(), '{label}')]]//span[contains(@class,'num')]")
+                            for elem in elems:
+                                m = re.search(r"([0-9]+\.?[0-9]*)", elem.text)
+                                if m:
+                                    return float(m.group(1))
+                            return None
 
-                        # 部分页面使用 div/span 文本（如 “谷用电：16.44”），增加直接搜索关键词兜底
+                        valley = valley if valley is not None else _extract_from_paragraph("谷")
+                        flat = flat if flat is not None else _extract_from_paragraph("平")
+                        peak = peak if peak is not None else _extract_from_paragraph("峰")
+                        sharp = sharp if sharp is not None else _extract_from_paragraph("尖")
+
+                        # 兜底：在整块里模糊匹配关键词 + 数字
                         def _extract_by_keyword(keyword: str):
                             xpath_candidates = [
                                 f".//*[contains(text(), '{keyword}')]",
@@ -906,7 +901,7 @@ class DataFetcher:
                                 f".//div[contains(text(), '{keyword}')]",
                             ]
                             for xp in xpath_candidates:
-                                for elem in detail_row.find_elements(By.XPATH, xp):
+                                for elem in detail_cell.find_elements(By.XPATH, xp):
                                     m = re.search(r"([0-9]+\.?[0-9]*)", elem.text)
                                     if m:
                                         return float(m.group(1))
@@ -916,19 +911,16 @@ class DataFetcher:
                         flat = flat if flat is not None else _extract_by_keyword("平用电")
                         peak = peak if peak is not None else _extract_by_keyword("峰用电")
                         sharp = sharp if sharp is not None else _extract_by_keyword("尖用电")
-                        logging.info(f"6-2")
                         break
                     except Exception as inner_e:
                         logging.debug(f"展开 {day_text} 尝试 {attempt+1} 失败: {inner_e}")
                         if attempt == 1:
                             if not took_detail_snapshot:
-                                logging.info(f"7")
                                 self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_failed")
                             raise
                         time.sleep(1)
                 else:
                     if not took_detail_snapshot:
-                        logging.info(f"8")
                         self._dump_snapshot(driver, f"daily_detail_{day_text}_expand_unresolved")
                         took_detail_snapshot = True
 

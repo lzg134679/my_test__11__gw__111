@@ -27,7 +27,7 @@ def apply_local_overrides():
         dest = os.path.join(target_dir, os.path.basename(src))
         try:
             shutil.copy2(src, dest)
-            print(f"[覆盖运行] 已将“{src}”中的py文件替换进“{dest}”")
+            print(f"[覆盖运行] 已将“{src}”替换进“{dest}”")
         except Exception as exc:
             print(f"[覆盖运行] 复制“{src}”失败: {exc}")
 
