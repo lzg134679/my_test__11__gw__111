@@ -22,14 +22,14 @@ def apply_local_overrides():
     if not override_files:
         print(f"在 {override_dir} 中未找到任何 .py 文件，跳过本地脚本覆盖步骤。")
         return
-    print(f"[覆盖运行] Found {len(override_files)} .py file(s) in {override_dir}, copying into container...")
+    print(f"[覆盖运行] 在HA目录“{override_dir}”中找到{len(override_files)}个py文件，正在复制到容器中...")
     for src in override_files:
         dest = os.path.join(target_dir, os.path.basename(src))
         try:
             shutil.copy2(src, dest)
-            print(f"[覆盖运行] Updated {dest} from {src}")
+            print(f"[覆盖运行] 已将“{src}”中的py文件替换进“{dest}”")
         except Exception as exc:
-            print(f"[覆盖运行] Failed to copy {src}: {exc}")
+            print(f"[覆盖运行] 复制“{src}”失败: {exc}")
 
 apply_local_overrides()
 

@@ -843,10 +843,17 @@ class DataFetcher:
                             self._dump_snapshot(driver, f"daily_detail_{day_text}_attempt{attempt+1}")
                             took_detail_snapshot = True
 
+                        # 使用日期重新定位行以避免展开后原行失效
                         try:
                             logging.info(f"3")
-                            WebDriverWait(driver, self.DETAIL_WAIT_TIME).until(
-                                lambda d: len(row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]") ) > 0
+                            WebDriverWait(driver, max(self.DETAIL_WAIT_TIME, 5)).until(
+                                lambda d: len(
+                                    d.find_elements(
+                                        By.XPATH,
+                                        f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1][contains(@class,'el-table__expanded-row')]",
+                                    )
+                                )
+                                > 0
                             )
                         except Exception:
                             logging.info(f"3-e")
@@ -855,7 +862,10 @@ class DataFetcher:
                         try:
                             logging.info(f"4")
                             driver.implicitly_wait(0)
-                            detail_rows = row.find_elements(By.XPATH, "following-sibling::tr[1][contains(@class,'el-table__expanded-row')]")
+                            detail_rows = driver.find_elements(
+                                By.XPATH,
+                                f"//div[@class='el-tab-pane dayd']//table/tbody/tr[contains(@class,'el-table__row') and .//td[1]/div[text()='{day_text}']]//following-sibling::tr[1][contains(@class,'el-table__expanded-row')]",
+                            )
                         finally:
                             logging.info(f"4-f")
                             driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
