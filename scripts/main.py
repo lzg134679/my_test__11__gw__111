@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 
 
 def apply_local_overrides():
-    """Copy local debug scripts from /config/gwkz/scripts into the container."""
-    override_dir = "/config/gwkz/scripts"
+    """复制文件进容器方便调试"""
+    override_dir = "/config/gwkz/.scripts"
     target_dir = os.path.dirname(os.path.abspath(__file__))
     if not os.path.isdir(override_dir):
         print(f"正常运行在非 Home Assistant 环境，跳过本地脚本覆盖步骤。")
